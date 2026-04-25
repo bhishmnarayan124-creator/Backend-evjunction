@@ -46,7 +46,7 @@ exports.register = async (req, res) => {
     }
 
     // ✅ ROLE PROTECTION
-    const allowedRoles = ["user", "vendor"];
+    const allowedRoles = ["user", "vendor", "admin"];
     role = allowedRoles.includes(role) ? role : "user";
 
     // ✅ PASSWORD hashing schema handle karega (no manual hash)
