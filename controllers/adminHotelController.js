@@ -64,7 +64,7 @@ exports.createHotel = async (req, res) => {
 
         roomImages[roomType] =
           req.files[key].map(
-            file => `/uploads/${file.filename}`
+            file => file.path
           );
 
       }
@@ -78,9 +78,8 @@ exports.createHotel = async (req, res) => {
 
     const imagePaths =
       req.files?.images?.map(
-        file => `/uploads/${file.filename}`
+        file => file.path
       ) || [];
-
 
     /* ===============================
        STATUS LOGIC
@@ -236,7 +235,7 @@ exports.getAllHotels = async (req, res) => {
 
     const hotels =
       await Hotel.find()
-      .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 });
 
     res.json({ hotels });
 
@@ -417,38 +416,38 @@ exports.deleteHotel = async (req, res) => {
 exports.incrementHotelView =
   async (req, res) => {
 
-  try {
+    try {
 
-    const hotel =
-      await Hotel.findByIdAndUpdate(
+      const hotel =
+        await Hotel.findByIdAndUpdate(
 
-        req.params.id,
+          req.params.id,
 
-        { $inc: { view_count: 1 } },
+          { $inc: { view_count: 1 } },
 
-        { returnDocument: "after" }
+          { returnDocument: "after" }
 
-      );
+        );
 
-    if (!hotel) {
+      if (!hotel) {
 
-      return res.status(404).json({
-        message: "Hotel not found"
+        return res.status(404).json({
+          message: "Hotel not found"
+        });
+
+      }
+
+      res.json(hotel);
+
+    } catch {
+
+      res.status(500).json({
+        message: "View update failed"
       });
 
     }
 
-    res.json(hotel);
-
-  } catch {
-
-    res.status(500).json({
-      message: "View update failed"
-    });
-
-  }
-
-};
+  };
 
 
 
@@ -459,30 +458,30 @@ exports.incrementHotelView =
 exports.getHotelById =
   async (req, res) => {
 
-  try {
+    try {
 
-    const hotel =
-      await Hotel.findById(
-        req.params.id
-      );
+      const hotel =
+        await Hotel.findById(
+          req.params.id
+        );
 
-    if (!hotel) {
+      if (!hotel) {
 
-      return res.status(404).json({
-        message: "Hotel not found"
+        return res.status(404).json({
+          message: "Hotel not found"
+        });
+
+      }
+
+      res.json(hotel);
+
+    } catch {
+
+      res.status(500).json({
+        message:
+          "Failed to fetch hotel"
       });
 
     }
 
-    res.json(hotel);
-
-  } catch {
-
-    res.status(500).json({
-      message:
-        "Failed to fetch hotel"
-    });
-
-  }
-
-};
+  };

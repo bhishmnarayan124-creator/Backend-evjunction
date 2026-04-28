@@ -41,7 +41,7 @@ exports.getCars = async (req, res) => {
         fast_charging_supported === "true";
     }
 
-    if (minPrice || maxPrice){
+    if (minPrice || maxPrice) {
       query.price = {};
       if (minPrice) query.price.$gte = Number(minPrice);
       if (maxPrice) query.price.$lte = Number(maxPrice);
@@ -182,7 +182,7 @@ exports.createCar = async (req, res) => {
 
     let battery = null;
 
-    
+
 
     // ✅ BATTERY CALCULATION
     if (req.body.current_range_km) {
@@ -192,26 +192,26 @@ exports.createCar = async (req, res) => {
         vehicleAgeYears: new Date().getFullYear() - req.body.year,
         mileageKm: mileage_km,
       });
-      console.log("Battery result:", battery); 
+      console.log("Battery result:", battery);
     }
 
     const imagePaths = req.files
-      ? req.files.map((file) => `/uploads/${file.filename}`)
+      ? req.files.map((file) => file.path)
       : [];
 
     let features = [];
 
-      if (req.body.features) {
-        try {
-          // frontend sends JSON string → parse it
-          features = JSON.parse(req.body.features);
-        } catch (err) {
-          // fallback if already array
-          if (Array.isArray(req.body.features)) {
-            features = req.body.features;
-          }
+    if (req.body.features) {
+      try {
+        // frontend sends JSON string → parse it
+        features = JSON.parse(req.body.features);
+      } catch (err) {
+        // fallback if already array
+        if (Array.isArray(req.body.features)) {
+          features = req.body.features;
         }
       }
+    }
 
     if (typeof features === "string") {
       features = features.split(",").map((f) => f.trim());
@@ -237,10 +237,10 @@ exports.createCar = async (req, res) => {
       listed_days,
 
       battery_health_score:
-      req.body.battery_health_score ?? battery?.healthScore,
+        req.body.battery_health_score ?? battery?.healthScore,
 
       battery_health_status:
-      req.body.battery_health_status ?? battery?.healthStatus,
+        req.body.battery_health_status ?? battery?.healthStatus,
     });
 
     // 🔔 Notify admin about pending approval
