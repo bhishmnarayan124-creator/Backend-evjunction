@@ -2,6 +2,8 @@ const User = require("../models/User");
 const { verifyPassword, createAccessToken } = require("../utils/auth");
 const { createNotification } = require("../utils/createNotification");
 const { updateMonthlyStats } = require("../utils/updateMonthlyStats");
+const crypto = require("crypto");
+const sendSMS = require("../utils/sendSMS");
 
 
 // ================= FORMAT USER =================
@@ -251,6 +253,171 @@ exports.checkAdminExists = async (req, res) => {
 
     res.status(500).json({
       message: "Failed to check admin existence"
+    });
+
+  }
+};
+
+
+// ================= SEND RESET OTP =================
+exports.forgotPasswordSendOTP = async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+
+    if (!email && !phone) {
+      return res.status(400).json({
+        message: "Email or phone required",
+      });
+    }
+
+    const user = await User.findOne({
+      $or: [
+        ...(email ? [{ email: email.toLowerCase().trim() }] : []),
+        ...(phone ? [{ phone }] : []),
+      ],
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (!user.phone) {
+      return res.status(400).json({
+        message: "No phone number linked with account",
+      });
+    }
+
+    // generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetOTP = otp;
+    user.resetOTPExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    await user.save();
+
+    await sendSMS(user.phone, `Your OTP is ${otp}`);
+
+    res.json({
+      message: "OTP sent successfully",
+    });
+
+  } catch (error) {
+
+    console.error("SEND OTP ERROR:", error);
+
+    res.status(500).json({
+      message: "Failed to send OTP",
+    });
+
+  }
+};
+
+
+
+// ================= VERIFY RESET OTP =================
+exports.forgotPasswordVerifyOTP = async (req, res) => {
+  try {
+    const { email, phone, otp } = req.body;
+
+    if (!otp) {
+      return res.status(400).json({
+        message: "OTP required",
+      });
+    }
+
+    const user = await User.findOne({
+      $or: [
+        ...(email ? [{ email }] : []),
+        ...(phone ? [{ phone }] : []),
+      ],
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (
+      user.resetOTP !== otp ||
+      user.resetOTPExpiry < Date.now()
+    ) {
+      return res.status(400).json({
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    // create reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    user.resetOTP = null;
+    user.resetOTPExpiry = null;
+
+    await user.save();
+
+    res.json({
+      reset_token: resetToken,
+      account: {
+        name: user.name,
+        masked_email:
+          user.email.slice(0, 2) +
+          "******" +
+          user.email.slice(-4),
+      },
+    });
+
+  } catch (error) {
+
+    console.error("VERIFY OTP ERROR:", error);
+
+    res.status(500).json({
+      message: "OTP verification failed",
+    });
+
+  }
+};
+
+
+// ================= RESET PASSWORD =================
+exports.forgotPasswordReset = async (req, res) => {
+  try {
+    const { reset_token, new_password, email, phone } = req.body;
+
+    if (!new_password) {
+      return res.status(400).json({
+        message: "New password required",
+      });
+    }
+
+    const user = await User.findOne({
+      $or: [
+        ...(email ? [{ email }] : []),
+        ...(phone ? [{ phone }] : []),
+      ],
+    }).select("+password");
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    user.password = new_password;
+
+    await user.save();
+
+    res.json({
+      message: "Password reset successful",
+    });
+
+  } catch (error) {
+
+    console.error("RESET PASSWORD ERROR:", error);
+
+    res.status(500).json({
+      message: "Password reset failed",
     });
 
   }

@@ -62,6 +62,14 @@ const userSchema = new mongoose.Schema(
         ref: "Car",
       },
     ],
+
+    resetOTP: {
+      type: String,
+    },
+
+    resetOTPExpiry: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
