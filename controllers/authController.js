@@ -46,7 +46,14 @@ exports.register = async (req, res) => {
     }
 
     // ✅ ROLE PROTECTION
-    const allowedRoles = ["user", "vendor", "admin"];
+    const adminExists = await User.exists({ role: "admin" });
+
+    let allowedRoles = ["user", "vendor"];
+
+    if (!adminExists) {
+      allowedRoles.push("admin");
+    }
+
     role = allowedRoles.includes(role) ? role : "user";
 
     // ✅ PASSWORD hashing schema handle karega (no manual hash)
@@ -70,7 +77,7 @@ exports.register = async (req, res) => {
     });
 
     try {
-      await updateMonthlyStats("new_users", 1);
+      await updateMonthlyStats("users_registered", 1);
     } catch (statsError) {
       console.error("Monthly stats update failed:", statsError.message);
     }
@@ -226,5 +233,25 @@ exports.updateProfile = async (req, res) => {
       message: "Profile update failed",
       error: error.message,
     });
+  }
+};
+
+
+// ================= CHECK ADMIN EXISTS =================
+exports.checkAdminExists = async (req, res) => {
+  try {
+
+    const adminExists = await User.exists({ role: "admin" });
+
+    res.json({
+      adminExists: !!adminExists
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: "Failed to check admin existence"
+    });
+
   }
 };

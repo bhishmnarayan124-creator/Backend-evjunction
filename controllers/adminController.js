@@ -445,6 +445,8 @@ exports.deleteCar = async (req, res) => {
       req.params.id
     );
 
+
+
     if (!car) {
       console.log("CAR NOT FOUND");
       return res.status(404).json({
@@ -454,6 +456,11 @@ exports.deleteCar = async (req, res) => {
 
     console.log("CAR DELETED:", car.model);
 
+
+    // 📊 Update monthly stats
+    if (car.status === "approved") {
+      await updateMonthlyStats("car_listings", -1);
+    }
     // Notify seller (if exists)
     if (car.seller) {
       console.log("SENDING SELLER NOTIFICATION");
@@ -940,6 +947,10 @@ exports.deleteHotel = async (req, res) => {
       });
     }
 
+    // 📊 Update monthly stats
+    if (hotel.status === "approved") {
+      await updateMonthlyStats("hotels_approved", -1);
+    }
     // Notify hotel owner
     if (hotel.owner) {
       await Notification.create({

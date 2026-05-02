@@ -4,6 +4,7 @@ const calculateBatteryHealth = require("../utils/batteryHealth");
 const mongoose = require("mongoose");
 const CarView = require("../models/CarView");
 const Notification = require("../models/Notification");
+const { updateMonthlyStats } = require("../utils/updateMonthlyStats");
 // ================= GET ALL CARS =================
 exports.getCars = async (req, res) => {
   try {
@@ -199,6 +200,9 @@ exports.createCar = async (req, res) => {
       ? req.files.map((file) => file.path)
       : [];
 
+    console.log("📸 Uploaded files:", req.files);
+    console.log("📸 Image URLs saved to DB:", imagePaths);
+
     let features = [];
 
     if (req.body.features) {
@@ -218,6 +222,10 @@ exports.createCar = async (req, res) => {
     }
 
     const listed_days = 0;
+    const status =
+      user.role === "admin"
+        ? "approved"
+        : "pending";
 
     const car = await Car.create({
       ...req.body,
@@ -233,7 +241,7 @@ exports.createCar = async (req, res) => {
       seller_name: user.name,
       seller_type: user.role === "dealer" ? "dealer" : "user",
 
-      status: "pending",
+      status,
       listed_days,
 
       battery_health_score:
@@ -242,16 +250,21 @@ exports.createCar = async (req, res) => {
       battery_health_status:
         req.body.battery_health_status ?? battery?.healthStatus,
     });
+    if (status === "approved") {
+      await updateMonthlyStats("car_listings", 1);
+    }
 
     // 🔔 Notify admin about pending approval
-    await Notification.create({
-      type: "car_pending",
-      title: "New Car Pending Approval",
-      message: `${user.name} submitted ${req.body.brand} ${req.body.model} for approval`,
-      createdBy: user._id,
-      relatedCar: car._id,
-      forAdmin: true,
-    });
+    if (status === "pending") {
+      await Notification.create({
+        type: "car_pending",
+        title: "New Car Pending Approval",
+        message: `${user.name} submitted ${req.body.brand} ${req.body.model} for approval`,
+        createdBy: user._id,
+        relatedCar: car._id,
+        forAdmin: true,
+      });
+    }
 
     res.status(201).json(car);
 

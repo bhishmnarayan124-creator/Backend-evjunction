@@ -14,5 +14,6 @@ router.post("/register", register);
 router.post("/login", login);
 router.get("/me", protect, getMe);
 router.put("/profile", protect, updateProfile);
+router.get("/admin-exists", authController.checkAdminExists);
 
 module.exports = router;
