@@ -4,6 +4,7 @@ const { createNotification } = require("../utils/createNotification");
 const { updateMonthlyStats } = require("../utils/updateMonthlyStats");
 const crypto = require("crypto");
 const sendSMS = require("../utils/sendSMS");
+const verifyOTP = require("../utils/verifyOTP");
 
 
 // ================= FORMAT USER =================
@@ -64,7 +65,11 @@ exports.register = async (req, res) => {
       email,
       password,
       name,
-      phone,
+      phone: phone?.startsWith("+91")
+        ? phone
+        : phone
+          ? `+91${phone}`
+          : undefined,
       city,
       role,
     });
@@ -262,42 +267,60 @@ exports.checkAdminExists = async (req, res) => {
 // ================= SEND RESET OTP =================
 exports.forgotPasswordSendOTP = async (req, res) => {
   try {
+
+    console.log("➡️ SEND OTP API HIT");
+    console.log("Request Body:", req.body);
+
     const { email, phone } = req.body;
 
     if (!email && !phone) {
+      console.log("❌ Email or phone missing");
       return res.status(400).json({
         message: "Email or phone required",
       });
     }
 
+    console.log("Searching user with:", { email, phone });
+
+    const normalizedPhone = phone?.replace("+91", "");
+
     const user = await User.findOne({
       $or: [
         ...(email ? [{ email: email.toLowerCase().trim() }] : []),
-        ...(phone ? [{ phone }] : []),
+        ...(phone
+          ? [
+            { phone },
+            { phone: normalizedPhone }
+          ]
+          : [])
       ],
     });
 
     if (!user) {
+      console.log("❌ User not found in DB");
       return res.status(404).json({
         message: "User not found",
       });
     }
 
+    console.log("✅ User found:", user.email);
+
     if (!user.phone) {
+      console.log("❌ User has no phone linked");
       return res.status(400).json({
         message: "No phone number linked with account",
       });
     }
 
-    // generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log("📲 Sending OTP to:", user.phone);
 
-    user.resetOTP = otp;
-    user.resetOTPExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const formattedPhone = user.phone.startsWith("+91")
+      ? user.phone
+      : `+91${user.phone}`;
 
-    await user.save();
+    await sendSMS(formattedPhone);
 
-    await sendSMS(user.phone, `Your OTP is ${otp}`);
+    console.log("✅ OTP sent successfully");
 
     res.json({
       message: "OTP sent successfully",
@@ -305,7 +328,7 @@ exports.forgotPasswordSendOTP = async (req, res) => {
 
   } catch (error) {
 
-    console.error("SEND OTP ERROR:", error);
+    console.error("❌ SEND OTP ERROR:", error);
 
     res.status(500).json({
       message: "Failed to send OTP",
@@ -319,43 +342,78 @@ exports.forgotPasswordSendOTP = async (req, res) => {
 // ================= VERIFY RESET OTP =================
 exports.forgotPasswordVerifyOTP = async (req, res) => {
   try {
+
+    console.log("➡️ VERIFY OTP API HIT");
+    console.log("Request Body:", req.body);
+
     const { email, phone, otp } = req.body;
 
     if (!otp) {
+      console.log("❌ OTP missing in request");
       return res.status(400).json({
         message: "OTP required",
       });
     }
 
+    const normalizedPhone = phone?.replace("+91", "");
+
+    console.log("Searching user with:", {
+      email,
+      phone,
+      normalizedPhone
+    });
+
     const user = await User.findOne({
       $or: [
-        ...(email ? [{ email }] : []),
-        ...(phone ? [{ phone }] : []),
+        ...(email ? [{ email: email.toLowerCase().trim() }] : []),
+        ...(phone
+          ? [
+            { phone },
+            { phone: normalizedPhone }
+          ]
+          : [])
       ],
     });
 
     if (!user) {
+      console.log("❌ User not found in DB");
       return res.status(404).json({
         message: "User not found",
       });
     }
 
-    if (
-      user.resetOTP !== otp ||
-      user.resetOTPExpiry < Date.now()
-    ) {
+    console.log("✅ User found:", user.email);
+    console.log("User phone from DB:", user.phone);
+
+    // Normalize phone for Twilio
+    const formattedPhone = user.phone.startsWith("+91")
+      ? user.phone
+      : `+91${user.phone}`;
+
+    console.log("📲 Verifying OTP for phone:", formattedPhone);
+    console.log("Entered OTP:", otp);
+
+    const isValid = await verifyOTP(formattedPhone, otp);
+
+    console.log("Twilio verification result:", isValid);
+
+    if (!isValid) {
+      console.log("❌ OTP invalid or expired");
       return res.status(400).json({
         message: "Invalid or expired OTP",
       });
     }
 
-    // create reset token
+    console.log("✅ OTP verified successfully");
+
     const resetToken = crypto.randomBytes(32).toString("hex");
 
-    user.resetOTP = null;
-    user.resetOTPExpiry = null;
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordTokenExpiry = Date.now() + 10 * 60 * 1000;
 
     await user.save();
+
+    console.log("🔐 Reset token generated:", resetToken);
 
     res.json({
       reset_token: resetToken,
@@ -370,7 +428,7 @@ exports.forgotPasswordVerifyOTP = async (req, res) => {
 
   } catch (error) {
 
-    console.error("VERIFY OTP ERROR:", error);
+    console.error("❌ VERIFY OTP ERROR:", error);
 
     res.status(500).json({
       message: "OTP verification failed",
@@ -383,28 +441,30 @@ exports.forgotPasswordVerifyOTP = async (req, res) => {
 // ================= RESET PASSWORD =================
 exports.forgotPasswordReset = async (req, res) => {
   try {
-    const { reset_token, new_password, email, phone } = req.body;
 
-    if (!new_password) {
+    const { reset_token, new_password } = req.body;
+
+    if (!reset_token || !new_password) {
       return res.status(400).json({
-        message: "New password required",
+        message: "Reset token and new password required",
       });
     }
 
     const user = await User.findOne({
-      $or: [
-        ...(email ? [{ email }] : []),
-        ...(phone ? [{ phone }] : []),
-      ],
+      resetPasswordToken: reset_token,
+      resetPasswordTokenExpiry: { $gt: Date.now() },
     }).select("+password");
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
+      return res.status(400).json({
+        message: "Invalid or expired reset token",
       });
     }
 
     user.password = new_password;
+
+    user.resetPasswordToken = null;
+    user.resetPasswordTokenExpiry = null;
 
     await user.save();
 

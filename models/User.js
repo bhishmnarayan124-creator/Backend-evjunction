@@ -63,13 +63,13 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
-    resetOTP: {
-      type: String,
-    },
+    resetPasswordToken: {
+  type: String,
+},
 
-    resetOTPExpiry: {
-      type: Date,
-    },
+resetPasswordTokenExpiry: {
+  type: Date,
+},
   },
   {
     timestamps: true,

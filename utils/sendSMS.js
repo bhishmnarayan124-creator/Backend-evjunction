@@ -1,34 +1,49 @@
-const axios = require("axios");
+const twilio = require("twilio");
 
-const sendSMS = async (phone, otp) => {
+const client = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+
+const sendSMS = async (phone) => {
   try {
-    const response = await axios.post(
-      "https://www.fast2sms.com/dev/bulkV2",
-      {
-        route: "q",
-        message: `Your EVJunction OTP is ${otp}. Valid for 10 minutes.`,
-        language: "english",
-        numbers: phone,
-      },
-      {
-        headers: {
-          authorization: process.env.FAST2SMS_API_KEY,
-          "Content-Type": "application/json",
-        },
+    // ✅ Validate phone
+    if (!phone) {
+      throw new Error("Phone number required");
+    }
+
+    // ✅ Normalize phone number format
+    let formattedPhone = phone.toString().trim();
+
+    // Handle different formats:
+    // 8078671752
+    // 918078671752
+    // +918078671752
+    if (!formattedPhone.startsWith("+")) {
+      if (formattedPhone.startsWith("91")) {
+        formattedPhone = `+${formattedPhone}`;
+      } else {
+        formattedPhone = `+91${formattedPhone}`;
       }
-    );
+    }
 
-    console.log("SMS sent:", response.data);
+    console.log("📲 Sending OTP to:", formattedPhone);
 
-    return response.data;
+    // ✅ Send OTP using Twilio Verify
+    const response = await client.verify.v2
+      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+      .verifications.create({
+        to: formattedPhone,
+        channel: "sms",
+      });
+
+    console.log("✅ OTP SENT STATUS:", response.status);
+
+    return response;
 
   } catch (error) {
-    console.error(
-      "SMS error:",
-      error.response?.data || error.message
-    );
-
-    throw new Error("SMS sending failed");
+    console.error("❌ SMS error:", error.message || error);
+    throw new Error("OTP sending failed");
   }
 };
 
